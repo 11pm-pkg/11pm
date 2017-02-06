@@ -8,3 +8,6 @@ finally settling on a language and setup.
 The implementation that got the furthest is written in Go. It hasn't gotten
 very far yet. It can be found at https://gitlab.com/hpm/hpm, along with a
 fair amount of info about what I want HPM to be.
+
+There is a fairly fleshed out roadmap (albeit without any dates) on a Trello
+board at https://trello.com/b/WNIUaPej/hpm.
