@@ -11,10 +11,10 @@
 #include <stdio.h>
 
 #include "util.h"
-#include "hpm.h"
+#include "11pm.h"
 
 
-int hpm_symlink(char *from, char *to)
+int xipm_symlink(char *from, char *to)
 {
     char *args[] = { from, NULL };
     size_t fromlen = strlen(from);

@@ -1,5 +1,5 @@
-bin_PROGRAMS = hpm
-hpm_SOURCES = hpm.h util.h package.h
-hpm_SOURCES += hpm.c util.c package.c install.c
+bin_PROGRAMS = 11pm
+11pm_SOURCES = 11pm.h util.h package.h
+11pm_SOURCES += 11pm.c util.c package.c install.c
 # Using gnu because glibc's fts.h needs it
-hpm_CFLAGS = -std=gnu11
+11pm_CFLAGS = -std=gnu11
