@@ -1,6 +1,6 @@
 #pragma once
 /* 11pm.h - functions and data types related
- * to the operation of HPM itself */
+ * to the operation of 11pm itself */
 
 // install.c - functions related to symlinking
 // (installing) already faked packages
