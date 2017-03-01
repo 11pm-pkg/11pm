@@ -1,3 +1,6 @@
+<img src="https://11pm-pkg.github.io/assets/images/11pm-logo.png" width="350"
+     title="11pm" alt="⫫PM">
+
 # 11pm - Independent Package Manager #
 
 11pm is an experimental package manager that I'm writing to easier facilitate
