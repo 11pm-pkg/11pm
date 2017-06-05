@@ -3,7 +3,7 @@
 #include "util.h"
 
 
-char *relativepath(const char const *path, const char const *base, char *out)
+char *_xirelpath(const char const *path, const char const *base, char *out)
 {
     int ci = 0;
     int oi = 0;

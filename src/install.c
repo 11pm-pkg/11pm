@@ -46,7 +46,7 @@ int xipm_symlink(char *from, char *to)
             strcpy(newfile+tolen, f->fts_path + fromlen + 1);
 
             char lntarget[strlen(newfile) + (int)(f->fts_pathlen * 1.4)];
-            relativepath(f->fts_path, newfile, lntarget);
+            _xirelpath(f->fts_path, newfile, lntarget);
 
             printf("ln %s -> %s (%s)...", newfile, lntarget, f->fts_path);
             if (symlink(lntarget, newfile)) {
