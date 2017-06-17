@@ -10,8 +10,8 @@
 #include <errno.h>
 #include <stdio.h>
 
-#include "util.h"
-#include "11pm.h"
+#include "../util.h"
+#include "23package.h"
 
 
 int xipm_symlink(char *from, char *to)
