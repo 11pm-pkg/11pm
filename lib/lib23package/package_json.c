@@ -1,10 +1,14 @@
+#include <memory.h>
+#include <string.h>
 #include <yajl/yajl_parse.h>
 
 #include "package.h"
 
+struct xi_pkg_parse_state;
+
 static int xi_pkg_parse_null(void *ctx);
 static int xi_pkg_parse_bool(void *ctx, int value);
-static int xi_pkg_parse_num(void *ctx, const unsigned char *value, size_t len);
+static int xi_pkg_parse_num(void *ctx, const char *value, size_t len);
 static int xi_pkg_parse_str(void *ctx, const unsigned char *value, size_t len);
 static int xi_pkg_parse_arys(void *ctx);
 static int xi_pkg_parse_arye(void *ctx);
@@ -13,11 +17,11 @@ static int xi_pkg_parse_mape(void *ctx);
 static int xi_pkg_parse_mapk(void *ctx, const unsigned char *key, size_t klen);
 
 static char *mkstrcpy(const char *const src, int len);
-static int mkbfromh(const char *const hex, int len);
+static int mkbfromh(unsigned char *dst, const char *const hex, int len);
 static int xi_hdlvsnhash(
         struct xi_pkg_parse_state *state,
         enum _xipkg_version_hashes hash_type,
-        const char *const hash_dest, int hash_len,
+        unsigned char *hash_dest, int hash_len,
         const char *const hex, int hex_len
 );
 
@@ -45,7 +49,7 @@ enum xi_vsn_parse_state_id {
     XI_VSN_PARSE_SOURCE_URL_ARY = 1 << 2,
     XI_VSN_PARSE_SOURCE_URL_ITEM,
     XI_VSN_PARSE_SOURCE_MIRR,
-    XI_VSN_PARSE_SOURCE_HASH,   = 1 << 3,
+    XI_VSN_PARSE_SOURCE_HASH    = 1 << 3,
     XI_VSN_PARSE_SOURCE_HASH_MD5,
     XI_VSN_PARSE_SOURCE_HASH_SHA1,
     XI_VSN_PARSE_SOURCE_HASH_SHA256,
@@ -64,6 +68,7 @@ static const unsigned int XI_VSN_PARSE_MASK =
 struct xi_pkg_parse_state {
     enum { XI_PARSE_PKG = 1 << 16, XI_PARSE_VSN = 1 << 17 } parse_which;
     union {
+        unsigned int _value;
         enum xi_pkg_parse_state_id pkg;
         enum xi_vsn_parse_state_id vsn;
     } state_id, status;
@@ -100,7 +105,7 @@ int xi_pkg_parse_null(void *ctx)
     return 1;
 }
 
-int xi_pkg_parse_num(void *ctx, const unsigned char *value, size_t len)
+int xi_pkg_parse_num(void *ctx, const char *value, size_t len)
 {
     struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
     // No properties exist in the current
@@ -112,13 +117,13 @@ int xi_pkg_parse_num(void *ctx, const unsigned char *value, size_t len)
 int xi_pkg_parse_bool(void *ctx, int value)
 {
     struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
-    switch (state->parse_which | state->state_id) {
+    switch (state->parse_which | state->state_id._value) {
         case XI_PARSE_VSN | XI_VSN_PARSE_SOURCE_MIRR:
             state->status.vsn |= XI_VSN_PARSE_SOURCE_MIRR;
             state->dest.vsn->source_info.mirror_friendly = value
                 ? XIPKG_MIRROR_FRIENDLY
                 : XIPKG_MIRROR_UNFRIENDLY;
-            state->state_id = XI_VSN_PARSE_SOURCE_KEY;
+            state->state_id.vsn = XI_VSN_PARSE_SOURCE_KEY;
             break;
         default:
             state->err = XI_PARSE_INCORRECT_TYPE;
@@ -131,26 +136,26 @@ int xi_pkg_parse_str(void *ctx, const unsigned char *value, size_t len)
 {
     struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
 
-    struct (state->parse_which | state->state_id) {
+    switch (state->parse_which | state->state_id._value) {
         case XI_PARSE_PKG | XI_PKG_PARSE_ID:
             state->status.pkg |= XI_PKG_PARSE_ID;
-            state->state_id = XI_PKG_PARSE_KEY;
+            state->state_id.pkg = XI_PKG_PARSE__KEY;
             break;
         case XI_PARSE_PKG | XI_PKG_PARSE_NAME:
             state->status.pkg |= XI_PKG_PARSE_NAME;
-            state->state_id = XI_PKG_PARSE_KEY;
+            state->state_id.pkg = XI_PKG_PARSE__KEY;
             break;
         case XI_PARSE_PKG | XI_PKG_PARSE_INFO_HOMEPAGE:
             state->status.pkg |= XI_PKG_PARSE_INFO_HOMEPAGE;
-            state->state_id = XI_PKG_PARSE_INFO_KEY;
+            state->state_id.pkg = XI_PKG_PARSE_INFO_KEY;
             break;
         case XI_PARSE_PKG | XI_PKG_PARSE_INFO_SUMMARY:
             state->status.pkg |= XI_PKG_PARSE_INFO_SUMMARY;
-            state->state_id = XI_PKG_PARSE_INFO_KEY;
+            state->state_id.pkg = XI_PKG_PARSE_INFO_KEY;
             break;
         case XI_PARSE_PKG | XI_PKG_PARSE_INFO_DESC:
             state->status.pkg |= XI_PKG_PARSE_INFO_DESC;
-            state->state_id = XI_PKG_PARSE_INFO_KEY;
+            state->state_id.pkg = XI_PKG_PARSE_INFO_KEY;
             break;
         case XI_PARSE_PKG | XI_PKG_PARSE_VSN_ITEM:
             break;
@@ -160,47 +165,47 @@ int xi_pkg_parse_str(void *ctx, const unsigned char *value, size_t len)
         case XI_PARSE_VSN | XI_VSN_PARSE_SOURCE_MIRR:
             if (len == 14   // strlen("ABSOLUTELY_NOT") == 14
                     && strncmp(value, "ABSOLUTELY_NOT", len)) {
-                state->value
-                    .dest->source_info.mirror_friendly
+                state->dest
+                    .vsn->source_info.mirror_friendly
                     = XIPKG_MIRROR_NEVER;
             } else {
                 state->err = XI_PARSE_INCORRECT_VALUE;
                 return 0;
             }
-            state->state_id = XI_VSN_PARSE_SOURCE_KEY;
+            state->state_id.vsn = XI_VSN_PARSE_SOURCE_KEY;
             break;
         case XI_PARSE_VSN | XI_VSN_PARSE_SOURCE_HASH_MD5:
             return xi_hdlvsnhash(state, XIPKG_HASH_MD5,
-                                 state->value.vsn->source_info.hash_md5, 16,
+                                 state->dest.vsn->source_info.hash_md5, 16,
                                  value, len);
         case XI_PARSE_VSN | XI_VSN_PARSE_SOURCE_HASH_SHA1:
             return xi_hdlvsnhash(state, XIPKG_HASH_SHA1,
-                                 state->value.vsn->source_info.hash_sha1, 20,
+                                 state->dest.vsn->source_info.hash_sha1, 20,
                                  value, len);
         case XI_PARSE_VSN | XI_VSN_PARSE_SOURCE_HASH_SHA256:
             return xi_hdlvsnhash(state, XIPKG_HASH_SHA256,
-                                 state->value.vsn->source_info.hash_sha256, 32,
+                                 state->dest.vsn->source_info.hash_sha256, 32,
                                  value, len);
         case XI_PARSE_VSN | XI_VSN_PARSE_SOURCE_HASH_SHA512:
             return xi_hdlvsnhash(state, XIPKG_HASH_SHA512,
-                                 state->value.vsn->source_info.hash_sha512, 64,
+                                 state->dest.vsn->source_info.hash_sha512, 64,
                                  value, len);
         case XI_PARSE_VSN | XI_VSN_PARSE_EXTRACT_DIR:
-            state->state_id = XI_VSN_PARSE_KEY;
+            state->state_id.vsn = XI_VSN_PARSE__KEY;
             break;
         case XI_PARSE_VSN | XI_VSN_PARSE_CHANGE_DIR:
-            state->state_id = XI_VSN_PARSE_KEY;
+            state->state_id.vsn = XI_VSN_PARSE__KEY;
             break;
         case XI_PARSE_VSN | XI_VSN_PARSE_INSTR_BUILD:
             state->status.vsn |= XI_VSN_PARSE_INSTR_BUILD;
-            state->state_id = XI_VSN_PARSE_INSTR_KEY;
+            state->state_id.vsn = XI_VSN_PARSE_INSTR_KEY;
             break;
         case XI_PARSE_VSN | XI_VSN_PARSE_INSTR_INSTALL:
             state->status.vsn |= XI_VSN_PARSE_INSTR_INSTALL;
-            state->state_id = XI_VSN_PARSE_INSTR_KEY;
+            state->state_id.vsn = XI_VSN_PARSE_INSTR_KEY;
             break;
         case XI_PARSE_VSN | XI_VSN_PARSE_INSTR_TEST:
-            state->state_id = XI_VSN_PARSE_INSTR_KEY;
+            state->state_id.vsn = XI_VSN_PARSE_INSTR_KEY;
             break;
 
         default:
@@ -262,7 +267,7 @@ static char *mkstrcpy(const char *const src, int len)
     hd >= 'a' && hd <= 'f'  ? \
         (hd - 'a') + 10     : \
         0xFF
-static int mkbfromh(const unsigned char *dst, const char *const hex, int len)
+static int mkbfromh(unsigned char *dst, const char *const hex, int len)
 {
     if (len % 2) { return -1; }
 
@@ -281,7 +286,7 @@ static int mkbfromh(const unsigned char *dst, const char *const hex, int len)
 static int xi_hdlvsnhash(
         struct xi_pkg_parse_state *state,
         enum _xipkg_version_hashes hash_type,
-        const unsigned char *const hash_dest, int hash_len,
+        unsigned char *hash_dest, int hash_len,
         const char *const hex, int hex_len
 )
 {
@@ -289,12 +294,12 @@ static int xi_hdlvsnhash(
         state->err = XI_PARSE_INCORRECT_VALUE;
         return 0;
     }
-    if (mkbfromh(hash_dest, hex, len)) {
+    if (mkbfromh(hash_dest, hex, hex_len)) {
         state->err = XI_PARSE_INCORRECT_VALUE;
         return 0;
     }
-    state->value.vsn->source_info.hashes |= hash_type;
+    state->dest.vsn->source_info.hashes |= hash_type;
     state->status.vsn |= XI_VSN_PARSE_SOURCE_HASH;
-    state->state_id = XI_VSN_PARSE_SOURCE_KEY;
+    state->state_id.vsn = XI_VSN_PARSE_SOURCE_KEY;
     return 1;
 }

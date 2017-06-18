@@ -17,10 +17,10 @@ enum _xipkg_mirror_friendly {
 };
 
 enum _xipkg_version_hashes {
-    XIPKG_HASH_MD5      = 1 << 0;
-    XIPKG_HASH_SHA1     = 1 << 1;
-    XIPKG_HASH_SHA256   = 1 << 2;
-    XIPKG_HASH_SHA512   = 1 << 3;
+    XIPKG_HASH_MD5      = 1 << 0,
+    XIPKG_HASH_SHA1     = 1 << 1,
+    XIPKG_HASH_SHA256   = 1 << 2,
+    XIPKG_HASH_SHA512   = 1 << 3,
 };
 
 
@@ -37,10 +37,10 @@ typedef struct xipkg_version {
         const char *const *const urls;
         enum _xipkg_mirror_friendly mirror_friendly;
         enum _xipkg_version_hashes hashes;
-        const unsigned char hash_md5[16];
-        const unsigned char hash_sha1[20];
-        const unsigned char hash_sha256[32];
-        const unsigned char hash_sha512[64];
+        unsigned char hash_md5[16];
+        unsigned char hash_sha1[20];
+        unsigned char hash_sha256[32];
+        unsigned char hash_sha512[64];
     } source_info;
 
     const char *const extract_dir;
