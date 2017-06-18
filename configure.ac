@@ -9,6 +9,7 @@ LT_INIT
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([
   Makefile
+  lib/Makefile
   lib/lib23package/Makefile
   lib/lib23repo/Makefile
   lib/lib23core/Makefile
