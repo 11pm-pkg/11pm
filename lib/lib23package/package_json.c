@@ -26,7 +26,6 @@ static int xi_hdlvsnhash(
 );
 
 enum xi_pkg_parse_state_id {
-    XI_PKG_PARSE_BEGIN          = 1 << 0,
     XI_PKG_PARSE__KEY = 3,
     XI_PKG_PARSE_ID             = 1 << 1,
     XI_PKG_PARSE_NAME           = 1 << 2,
@@ -42,7 +41,6 @@ static const unsigned int XI_PKG_PARSE_MASK =
     (XI_PKG_PARSE_VSN_ARY << 1) - 1;
 
 enum xi_vsn_parse_state_id {
-    XI_VSN_PARSE_BEGIN          = 1 << 0,
     XI_VSN_PARSE__KEY = 3,
     XI_VSN_PARSE_SOURCE         = 1 << 1,
     XI_VSN_PARSE_SOURCE_KEY = 5,
@@ -54,7 +52,7 @@ enum xi_vsn_parse_state_id {
     XI_VSN_PARSE_SOURCE_HASH_SHA1,
     XI_VSN_PARSE_SOURCE_HASH_SHA256,
     XI_VSN_PARSE_SOURCE_HASH_SHA512,
-    XI_VSN_PARSE_EXTRACT_DIR = 17,
+    XI_VSN_PARSE_EXTRACT_DIR,
     XI_VSN_PARSE_CHANGE_DIR,
     XI_VSN_PARSE_INSTR          = 1 << 4,
     XI_VSN_PARSE_INSTR_KEY,
@@ -63,7 +61,7 @@ enum xi_vsn_parse_state_id {
     XI_VSN_PARSE_INSTR_TEST
 };
 static const unsigned int XI_VSN_PARSE_MASK =
-    (XI_VSN_PARSE_INSTR_INSTALL << 1) - 1;
+    (XI_VSN_PARSE_INSTR_INSTALL << 1) - 2;
 
 struct xi_pkg_parse_state {
     enum { XI_PARSE_PKG = 1 << 16, XI_PARSE_VSN = 1 << 17 } parse_which;
@@ -72,6 +70,7 @@ struct xi_pkg_parse_state {
         enum xi_pkg_parse_state_id pkg;
         enum xi_vsn_parse_state_id vsn;
     } state_id, status;
+    unsigned int ignore_depth;
 
     union {
         xipackage_t *pkg;
@@ -97,26 +96,54 @@ static yajl_callbacks xi_pkg_parse_callbacks = {
 };
 
 
-int xi_pkg_parse_null(void *ctx)
+xipackage_t *xipackage_from_json(const char *const json_data)
 {
-    // We treat null as "no value",
-    // which is the same as the key
-    // not being present.
+}
+
+
+static int xi_pkg_parse_null(void *ctx)
+{
+    struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
+    if (state->ignore_depth) {
+        // This value is ignored
+        return 1;
+    }
+    
+    switch (state->parse_which | state->state_id._value) {
+        // The spec currently forbids null
+        default:
+            state->err = XI_PARSE_INCORRECT_TYPE;
+            return 0;
+    }
     return 1;
 }
 
-int xi_pkg_parse_num(void *ctx, const char *value, size_t len)
+static int xi_pkg_parse_num(void *ctx, const char *value, size_t len)
 {
     struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
-    // No properties exist in the current
-    // spec with a number type
-    state->err = XI_PARSE_INCORRECT_TYPE;
-    return 0;
+    if (state->ignore_depth) {
+        // This value is ignored
+        return 1;
+    }
+
+    switch (state->parse_which | state->state_id._value) {
+        // No properties exist in the current
+        // spec with a number type
+        default:
+            state->err = XI_PARSE_INCORRECT_TYPE;
+            return 0;
+    }
+    return 1;
 }
 
-int xi_pkg_parse_bool(void *ctx, int value)
+static int xi_pkg_parse_bool(void *ctx, int value)
 {
     struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
+    if (state->ignore_depth) {
+        // This value is ignored
+        return 1;
+    }
+
     switch (state->parse_which | state->state_id._value) {
         case XI_PARSE_VSN | XI_VSN_PARSE_SOURCE_MIRR:
             state->status.vsn |= XI_VSN_PARSE_SOURCE_MIRR;
@@ -132,9 +159,13 @@ int xi_pkg_parse_bool(void *ctx, int value)
     return 1;
 }
 
-int xi_pkg_parse_str(void *ctx, const unsigned char *value, size_t len)
+static int xi_pkg_parse_str(void *ctx, const unsigned char *value, size_t len)
 {
     struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
+    if (state->ignore_depth) {
+        // This value is ignored
+        return 1;
+    }
 
     switch (state->parse_which | state->state_id._value) {
         case XI_PARSE_PKG | XI_PKG_PARSE_ID:
@@ -216,39 +247,115 @@ int xi_pkg_parse_str(void *ctx, const unsigned char *value, size_t len)
     return 1;
 }
 
-int xi_pkg_parse_arys(void *ctx)
+static int xi_pkg_parse_arys(void *ctx)
 {
     struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
+    if (state->ignore_depth) {
+        // This array, and all nested values, are ignored
+        state->ignore_depth += 1;
+        return 1;
+    }
+
+    switch (state->parse_which | state->state_id._value) {
+        case XI_PARSE_PKG | XI_PKG_PARSE_VSN_ARY:
+            state->state_id.pkg = XI_PKG_PARSE_VSN_ITEM;
+            break;
+        
+        default:
+            state->err = XI_PARSE_INCORRECT_TYPE;
+            return 0;
+    }
+
     return 1;
 }
 
-int xi_pkg_parse_arye(void *ctx)
+static int xi_pkg_parse_arye(void *ctx)
 {
     struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
+    if (state->ignore_depth) {
+        // Leaving an ignored array
+        state->ignore_depth -= 1;
+        return 1;
+    }
+
+    switch (state->parse_which | state->state_id._value) {
+        case XI_PARSE_PKG | XI_PKG_PARSE_VSN_ITEM:
+            state->status.pkg |= XI_PKG_PARSE_VSN_ARY;
+            state->state_id.pkg = XI_PKG_PARSE__KEY;
+            break;
+        
+        default:
+            state->err = XI_PARSE_INCORRECT_TYPE;
+            return 0;
+    }
+
     return 1;
 }
 
-int xi_pkg_parse_maps(void *ctx)
+static int xi_pkg_parse_maps(void *ctx)
 {
     struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
+    if (state->ignore_depth) {
+        // This map, and all nested values, are ignored
+        state->ignore_depth += 1;
+        return 1;
+    }
+
+    switch (state->parse_which | state->state_id._value) {
+        case XI_PARSE_PKG:
+            state->state_id.pkg = XI_PKG_PARSE__KEY;
+            break;
+        
+        case XI_PARSE_PKG | XI_PKG_PARSE_INFO:
+            state->state_id.pkg = XI_PKG_PARSE_INFO_KEY;
+            break;
+
+        case XI_PARSE_VSN:
+            state->state_id.vsn = XI_VSN_PARSE__KEY;
+            break;
+
+        case XI_PARSE_VSN | XI_VSN_PARSE_INSTR:
+            state->state_id.vsn = XI_VSN_PARSE_INSTR_KEY;
+            break;
+
+        case XI_PARSE_VSN | XI_VSN_PARSE_SOURCE:
+            state->state_id.vsn = XI_VSN_PARSE_SOURCE_KEY;
+            break;
+
+        default:
+            state->err = XI_PARSE_INCORRECT_TYPE;
+            return 0;
+    }
+
     return 1;
 }
 
-int xi_pkg_parse_mape(void *ctx)
+static int xi_pkg_parse_mape(void *ctx)
 {
     struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
+    if (state->ignore_depth) {
+        // Leaving an ignored map
+        state->ignore_depth -= 1;
+        return 1;
+    }
+
     return 1;
 }
 
-int xi_pkg_parse_mapk(void *ctx, const unsigned char *key, size_t klen)
+static int xi_pkg_parse_mapk(void *ctx, const unsigned char *key, size_t klen)
 {
     struct xi_pkg_parse_state *state = *((struct xi_pkg_parse_state **) ctx);
+    if (state->ignore_depth == 1) {
+        // Just finished an ignored value; stop ignoring
+        state->ignore_depth = 0;
+    } else if (state->ignore_depth) {
+        // Still ignoring this map
+        return 1;
+    }
+
+    // TODO: Map keys
+
     return 1;
-}
-
-
-xipackage_t *xipackage_from_json(const char *const json_data)
-{
 }
 
 static char *mkstrcpy(const char *const src, int len)

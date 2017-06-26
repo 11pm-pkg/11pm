@@ -60,6 +60,7 @@ typedef struct xipackage {
         const char *const summary;
         const char *const description;
     } info;
+    int versions_len;
     const xipkg_version_t *const versions;
 } xipackage_t;
 
