@@ -1,2 +1,8 @@
 */*.suite/*.sh
 !*/*.suite/*.test.sh
+
+*/t
+*/t.c
+*/t_calls.c
+
+*/test-suite.log

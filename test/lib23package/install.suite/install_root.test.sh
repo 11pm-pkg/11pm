@@ -2,7 +2,7 @@
 
 set -e
 
-INSTALL_DEST='dest/github.com/11pm-pkg/11pm'
+DEST='dest/example.com/foo'
 
 mkdir -pv \
   bin lib doc \
@@ -32,9 +32,9 @@ echo EOF
 t -?0
 ## include "23package.h"
 #{
-#   return xipkg_symlink(sh_DEST, "/");
+#   return xipm_symlink(args[0], "/");
 #}
-t eval @@ : assert -?0 -re
+t eval @@ "$DEST" : assert -?0 -re
 
 t assert [ -L bin/foo ]
 t assert [ "$(readlink bin/foo)" = "../$DEST$PWD/bin/foo" ] \

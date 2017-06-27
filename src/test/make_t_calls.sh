@@ -2,12 +2,15 @@
 
 echo '#line 4 "'"$0"'"
 #define T_CALLFN(id) \
-    static int t_call_##id()
+    static int t_call_##id(char **args)
 #define T_CALL(id,call) \
-    T_CALLFN(id) { return call; }'
+    T_CALLFN(id) { return call; }
+typedef int (*cb_t)(char **args);
+extern cb_t fnames[];
+'
 
-fn_ary="#line 11 \"$0\"
-extern int (*fnames)()[] = {"
+fn_ary="#line 13 \"$0\"
+cb_t fnames[] = {"
 
 id=0
 for fil in $@; do
@@ -19,18 +22,18 @@ for fil in $@; do
 
     if [ "${line:0:2}" = '##' ]; then
       echo "#line $lno \"$fil\"
-#${line:2}"
+# ${line:2}"
     elif [ "${line:0:2}" = '#=' ]; then
       fnid="${suite}__${tst}__${id}"
       ((id=id+1))
-      echo "#line 28 \"$0\"
+      echo "#line 30 \"$0\"
 T_CALL($fnid,
 #line $lno \"$fil\"
-${line:2}
-#line 32 \"$0\"
+  ${line:2}
+#line 34 \"$0\"
 )"
       fn_ary="$fn_ary
-#line 35 \"$0\"
+#line 37 \"$0\"
     t_call_$fnid,"
     elif [ "${line:0:2}" = '#{' ]; then
       fnid="${suite}__${tst}__${id}"
@@ -40,13 +43,13 @@ T_CALLFN($fnid)
 #line $lno \"$fil\"
 {"
       fn_ary="$fn_ary
-#line 45 \"$0\"
+#line 47 \"$0\"
     t_call_$fnid,"
 
       echo "$line" >>"$suite.suite/$tst.sh"
       while read -r ln; do
         ((lno=lno+1))
-        echo "${ln:1}"
+        echo " ${ln:1}"
         echo "$ln" >>"$suite.suite/$tst.sh"
         if [ "${ln:0:2}" = '#}' ]; then
           break
@@ -66,5 +69,5 @@ T_CALLFN($fnid)
 done
 
 echo "$fn_ary
-#line 69 \"$0\"
-}"
+#line 73 \"$0\"
+};"
