@@ -15,5 +15,8 @@ AC_CONFIG_FILES([
   lib/lib23core/Makefile
   lib/lib11pm/Makefile
   src/11pm/Makefile
+  src/test/Makefile
+  test/Makefile
+  test/lib23package/Makefile
 ])
 AC_OUTPUT
