@@ -31,10 +31,8 @@ echo EOF
 
 t -?0
 ## include "23package.h"
-#{
-#   return xipm_symlink(args[0], "/");
-#}
-t eval @@ "$DEST" : assert -?0 -re
+#= xipm_symlink(args[0], "/");
+t eval @@ "$DEST" : assert -r0 -e0
 
 t assert [ -L bin/foo ]
 t assert [ "$(readlink bin/foo)" = "../$DEST$PWD/bin/foo" ] \
@@ -47,4 +45,4 @@ t assert [ "$(readlink doc/foo_usage.txt)" = "../$DEST$PWD/doc/foo_usage.txt" ] 
   -ax '$(readlink doc/foo_usage.txt)'
 
 t assert [ -x bin/foo ] -?- \
-  && t assert -x0 bin/foo | t assert [- = 'Hello World' ]
+  && t assert -?0 -- bin/foo | t assert [- = 'Hello World' ]

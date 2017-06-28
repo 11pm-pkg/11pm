@@ -70,4 +70,5 @@ done
 
 echo "$fn_ary
 #line 73 \"$0\"
+    0
 };"
