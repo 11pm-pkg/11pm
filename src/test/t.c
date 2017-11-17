@@ -3,10 +3,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 
 typedef int (*inline_func_t)(char **args);
 extern inline_func_t inlines[];
 int n_inlines;
+
+int statuspipe;
 
 
 struct t_getopt_s {
@@ -29,6 +35,13 @@ static int t_test(int argc, char **argv);
 
 int main(int argc, char **argv)
 {
+    statuspipe = open(".tstatus", O_WRONLY | O_CLOEXEC);
+    for (int i = 0; i < argc; i += 1) {
+        dprintf(statuspipe, "\"%s\" ", argv[i]);
+    }
+    dprintf(statuspipe, "\n");
+
+    // TODO: what path to take?
 }
 
 
@@ -88,6 +101,108 @@ static int t_assert(int argc, char **argv)
  */
 static int t_eval(int argc, char **argv)
 {
+    // Get len(inlines)
+    for (n_inlines = 0; inlines[n_inlines]; n_inlines += 1) {}
+}
+
+
+/* Implementation of `[`.
+ * Should be largely compatible with bash's `test`.
+ * Also supports using something like `[- op ... ]`
+ * to test against stdin.
+ */
+static int t_test(int argc, char **argv)
+{
+    int real_argc = -1;
+    for (int i = 0; i < argc; i += 1) {
+        if (strcmp(argv[i], "]") == 0 ||
+                strcmp(argv[i], "<]") == 0) {
+            real_argc = i;  // Not subtracting 1 excludes the ],
+                            // which is what we want.
+            break;
+        } else if (strcmp(argv[i], "-]") == 0) {
+            errx(2, "[: cannot use stdin for rhs");
+        }
+    }
+
+    if (real_argc == -1) {
+        errx(2, "[: no matching ] or <]");
+    }
+
+    char *lhs, *rhs;
+    enum { ISFILE_NO = 0, ISFILE_STDIN, ISFILE_PATH }
+        lhs_isfile, rhs_isfile;
+    int argc_mod = 0;
+
+    if (strcmp(argv[0], "[-") == 0) {
+        lhs_isfile = ISFILE_STDIN;
+        argc_mod = 1;
+    } else if (strcmp(argv[0], "[<") == 0) {
+        lhs_isfile = ISFILE_PATH;
+    }
+
+    if (real_argc == 2 - argc_mod) {
+        // This is a unary operator
+        if (argv[1][0] != '-')
+            errx(2, "[: unary operator must start with -");
+    } else if (real_argc == 3 - argc_mod) {
+        // This is a binary operator
+
+        if (!argc_mod) {
+            lhs = argv[1];
+        }
+
+        rhs = argv[3 - argc_mod];
+        if (strcmp(argv[real_argc], "<]") == 0) {
+            rhs_isfile = ISFILE_PATH;
+        }
+
+        op = argv[2 - argc_mod];
+        if (op[0] == '-') {
+            // Numeric comparison
+            if (lhs_isfile)
+                errx(2, "[: lhs is file content in numeric comparison");
+            if (rhs_isfile)
+                errx(2, "[: rhs is file content in numeric comparison");
+            
+            if (lhs[0] == '\0')
+                errx(2, "[: lhs is empty");
+            if (rhs[0] == '\0')
+                errx(2, "[: rhs is empty");
+            
+            char *end;
+            long lhs_i = strtol(lhs, &end, 10);
+            if (end[0] != '\0')
+                errx(2, "[: lhs '%s' is not a valid integer", lhs);
+            
+            long rhs_i = strtol(rhs, &end, 10);
+            if (end[0] != '\0')
+                errx(2, "[: rhs '%s' is not a valid integer", rhs);
+            
+            if (strcmp(op, "-eq") == 0) {
+
+            } else if (strcmp(op, "-ne") == 0) {
+
+            } else if (strcmp(op, "-lt") == 0) {
+
+            } else if (strcmp(op, "-le") == 0) {
+
+            } else if (strcmp(op, "-gt") == 0) {
+
+            } else if (strcmp(op, "-ge") == 0) {
+
+            }
+        } else {
+            // String comparison
+        }
+    } else {
+        // Don't have an operator for this many args :(
+        
+        if (real_argc < 2 - argc_mod)
+            errx(2, "[: too few arguments");
+        else
+            errx(2, "[: too many arguments");
+    }
 }
 
 
